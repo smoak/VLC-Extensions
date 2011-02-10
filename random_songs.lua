@@ -67,6 +67,7 @@ end
 
 function enqueue(num_songs)
     local ml = vlc.playlist.get("ml")
+    num_songs = tonumber(num_songs)
     if ml == nil then
         vlc.msg.warn("Could not get media library...aborting...")
         return false
@@ -76,25 +77,60 @@ function enqueue(num_songs)
         return false
     end
     -- at this point the media library is populated
-    for i, node in ipairs(ml.children) do
-        if type(node.children) == "table" then
-            for ii, node2 in ipairs(node.children) do
-                if ii == 1 then
-                  for iii, node3 in ipairs(node2.children) do
-                      vlc.msg.dbg("type(Node3.children) = " .. type(node3.children))
-                      for i4, node4 in ipairs(node3.children) do
-                        vlc.msg.dbg("type(node4) = " .. type(node4))
-                        vlc.msg.dbg(node4.path)
-                      end
-                  end
-                  vlc.msg.dbg(#node2.children)
-                  vlc.msg.dbg(node2.path)
-                  vlc.msg.dbg(type(node2.children))
-                  break
-                end
-            end
-        end 
+    -- ml.name is just Media Library
+
+    -- Initialize the pseudo random number generator
+    math.randomseed( os.time() )
+    math.random(); math.random(); math.random()
+    -- done. :-)
+
+    local file_list = {}
+    local i = 1
+    for n in get_songs_from_media_library(ml) do
+        file_list[i] = n
+        i = i + 1
     end
+    if num_songs > #file_list then
+        vlc.msg.warn("Requested number of random songs is bigger than size of your library!")
+        return false
+    end
+    shuffle(file_list)
+    for j=1, num_songs do
+         enqueue_song(file_list[j])
+    end
+end
+
+function enqueue_song(song)
+    vlc.msg.dbg("Enqueuing song " .. song.name)
+    vlc.playlist.enqueue({song})
+end
+
+function shuffle(t)
+    local n = #t
+ 
+    while n > 2 do
+        -- n is now the last pertinent index
+        local k = math.random(n) -- 1 <= k <= n
+        -- Quick swap
+        t[n], t[k] = t[k], t[n]
+        n = n - 1
+    end
+ 
+    return t
+end
+
+function get_songs_from_media_library(node)
+    local function yieldtree(node)
+        for _, c in ipairs(node.children) do
+            if string.find(c.path, "vlc://nop") == nil then
+                coroutine.yield(c)
+            end
+            if c.children and #c.children > 0 then
+                yieldtree(c)
+            end
+        end
+    end
+    return coroutine.wrap(function() yieldtree(node) end)
 end
 
 function make_prompt()
