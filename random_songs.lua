@@ -20,7 +20,8 @@
 
 dlg = nil
 text_bx = nil
-
+error_bx = nil
+error_msgs = {}
 
 -- Script descriptor, called when the extensions are scanned
 function descriptor()
@@ -59,21 +60,40 @@ function cancel()
 end
 
 function close_and_enqueue()
-    local num_to_enqueue = text_bx:get_text()
+    local num_to_enqueue = text_bx:get_text() or 0
     vlc.msg.dbg("Enqueuing " .. num_to_enqueue)
-    enqueue(num_to_enqueue)
-    reset_variables_and_deactivate() 
+    if enqueue(num_to_enqueue) then
+		reset_variables_and_deactivate() 
+	end
+	show_errors()
+end
+
+function show_errors()
+	if #error_msgs > 0 then
+		error_message = ""
+		for i, msg in pairs(error_msgs) do
+			error_message = error_message .. msg .. "<br>"
+		end
+		error_bx:set_text(error_message)
+	end
 end
 
 function enqueue(num_songs)
+    if tonumber(num_songs) == nil then
+		table.insert(error_msgs, "Please enter a number")
+		vlc.msg.warn("num_songs is not a number")
+		return false
+	end
     local ml = vlc.playlist.get("ml")
     num_songs = tonumber(num_songs)
     if ml == nil then
         vlc.msg.warn("Could not get media library...aborting...")
+		table.insert(error_msgs, "There was a problem retreiving your media library.")
         return false
     end
     if #ml.children == 0 then
         vlc.msg.warn("Media library is empty?")
+		table.insert(error_msgs, "There was a problem retreiving your media library.")
         return false
     end
     -- at this point the media library is populated
@@ -92,12 +112,15 @@ function enqueue(num_songs)
     end
     if num_songs > #file_list then
         vlc.msg.warn("Requested number of random songs is bigger than size of your library!")
+		table.insert(error_msgs, "Requested number of random songs is bigger than size of your library.")
         return false
     end
     shuffle(file_list)
     for j=1, num_songs do
          enqueue_song(file_list[j])
     end
+	
+	return true
 end
 
 function enqueue_song(song)
@@ -137,7 +160,13 @@ function make_prompt()
   dlg = vlc.dialog("Random Songs")
   dlg:add_label("How many random songs?", 1, 1, 1, 1)
   text_bx = dlg:add_text_input("", 2, 1, 1, 1)
+  error_bx = dlg:add_label("", 1, 1, 1, 1)
   dlg:add_button("Enqueue", close_and_enqueue, 3, 1, 1, 1)
   dlg:add_button("Cancel", cancel, 3, 2, 1, 1)
   dlg:show()
+end
+
+-- called when user clicks "x" at top right
+function close()
+  vlc.deactivate()
 end
